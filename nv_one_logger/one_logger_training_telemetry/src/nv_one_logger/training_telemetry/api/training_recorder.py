@@ -19,6 +19,7 @@ from nv_one_logger.core.event import Event
 from nv_one_logger.core.exceptions import OneLoggerError, assert_that
 from nv_one_logger.core.internal.metric_summarizer import MetricSummarizer
 from nv_one_logger.core.internal.multi_window_timer import MultiWindowTimer
+from nv_one_logger.core.internal.safe_execution import safely_execute
 from nv_one_logger.core.internal.version import get_version
 from nv_one_logger.core.span import Span, SpanName, StandardSpanName
 from nv_one_logger.core.time import TracingTimestamp
@@ -413,6 +414,32 @@ class TrainingRecorder(DefaultRecorder):
         # Finalize everything and clean up.
         self.close()
 
+    def on_distributed_init_start(self, start_time: TracingTimestamp) -> Span:
+        """Start a new span for distributed initialization.
+
+        Args:
+            start_time: The timestamp of the start of distributed initialization.
+
+        Returns:
+            Span: The newly created span for distributed initialization.
+        """
+        return self.start(
+            span_name=StandardTrainingJobSpanName.DIST_INIT,
+            start_time=start_time,
+        )
+
+    def on_distributed_init_end(self, stop_time: TracingTimestamp) -> None:
+        """Stop the distributed initialization span, and update the state if necessary.
+
+        Args:
+            stop_time: The timestamp of the end of distributed initialization.
+        """
+        self.stop(
+            span=self._get_active_span(StandardTrainingJobSpanName.DIST_INIT),
+            stop_time=stop_time,
+        )
+
+    @safely_execute
     def _update_application_span_with_training_telemetry_config(self, training_telemetry_config: TrainingTelemetryConfig) -> None:
         """Update the application span with training telemetry configuration when training config becomes available.
 
@@ -894,13 +921,17 @@ class TrainingRecorder(DefaultRecorder):
             stop_time=stop_time,
         )
 
-    def create_sync_checkpoint_metrics_event(self) -> Event:
-        """Create an event of type SYNC_CHECKPOINT_METRICS_UPDATE using the most recent checkpoint metrics."""
-        sync_checkpoint_timer = self._training_state.multi_iteration_timers[StandardTrainingJobSpanName.CHECKPOINT_SAVE_SYNC]
+    def create_sync_checkpoint_metrics_event(self, span_name: StandardTrainingJobSpanName) -> Event:
+        """Create an event of type SYNC_CHECKPOINT_METRICS_UPDATE using the most recent checkpoint metrics.
+
+        Although the event name says "SYNC", this captures the main-thread window (start→end) for checkpoint
+        saving regardless of strategy (SYNC or ASYNC). The appropriate timer is selected based on the span.
+        """
+        checkpoint_timer = self._training_state.multi_iteration_timers[span_name]
         attributes = SyncCheckpointMetricsUpdateAttributes.create(
-            save_checkpoint_sync_time_total_sec=sync_checkpoint_timer.total_time_sec,
-            save_checkpoint_sync_time_min_sec=sync_checkpoint_timer.min_window_duration_sec,
-            save_checkpoint_sync_time_max_sec=sync_checkpoint_timer.max_window_duration_sec,
+            save_checkpoint_sync_time_total_sec=checkpoint_timer.total_time_sec,
+            save_checkpoint_sync_time_min_sec=checkpoint_timer.min_window_duration_sec,
+            save_checkpoint_sync_time_max_sec=checkpoint_timer.max_window_duration_sec,
         )
         return Event.create(name=StandardTrainingJobEventName.SYNC_CHECKPOINT_METRICS_UPDATE, attributes=attributes)
 
@@ -1030,9 +1061,8 @@ class TrainingRecorder(DefaultRecorder):
         if training_telemetry_config.is_save_checkpoint_enabled:
             self._training_state.multi_iteration_timers[span.name].stop(stop_time=stop_time)  # type: ignore[reportArgumentType]
 
-            # Step 2: send an event of type SYNC_CHECKPOINT_METRICS_UPDATE if sync checkpoint.
-            if training_telemetry_config.save_checkpoint_strategy == CheckPointStrategy.SYNC:
-                self.event(span, self.create_sync_checkpoint_metrics_event())
+            # Step 2: send an event of type SYNC_CHECKPOINT_METRICS_UPDATE for both sync and async strategies.
+            self.event(span, self.create_sync_checkpoint_metrics_event(span.name))
 
         # Step 3: stop the span.
         self.stop(span=span, stop_time=stop_time)

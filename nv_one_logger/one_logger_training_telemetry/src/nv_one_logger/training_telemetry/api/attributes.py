@@ -204,7 +204,7 @@ class OneLoggerInitializationAttributes(Attributes):
 
         if custom_metadata is not None:
             # Flatten custom metadata to comply with the expected type of the `add` method.
-            attributes.add("custom_metadata", [f"{k}:{v}" for k, v in custom_metadata.items()])
+            attributes.add("custom_metadata", [f"{k}:{v}" for k, v in custom_metadata.items()])  # noqa: E231
 
         return attributes
 
@@ -1091,7 +1091,11 @@ class SaveCheckpointSuccessEventAttributes(Attributes):
 
 
 class SyncCheckpointMetricsUpdateAttributes(Attributes):
-    """Event attributes for a SYNC_CHECKPOINT_METRICS_UPDATE event of the CHECKPOINT_SAVE_SYNC span for training jobs."""
+    """Event attributes for a SYNC_CHECKPOINT_METRICS_UPDATE event of checkpoint save spans.
+
+    Despite the event name, these attributes represent the timing of the main-thread window
+    (start→end) for saving a checkpoint and apply to both SYNC and ASYNC strategies.
+    """
 
     @classmethod
     def create(
