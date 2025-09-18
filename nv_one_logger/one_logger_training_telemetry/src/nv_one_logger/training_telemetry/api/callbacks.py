@@ -48,6 +48,33 @@ def on_app_end(finish_time_msec: Optional[float] = None) -> None:
 
 
 @safely_execute
+def on_distributed_init_start(start_time_msec: Optional[float] = None) -> Span:
+    """Call when the distributed initialization starts.
+
+    Args:
+        start_time_msec (Optional[float], optional): The timestamp of starting distributed initialization as milliseconds since epoch.
+        If not provided, the current timestamp will be used as the start time of distributed initialization.
+
+    Returns:
+        The span corresponding to the distributed initialization (StandardTrainingJobSpanName.DIST_INIT).
+    """
+    start_time = TracingTimestamp.for_timestamp(timestamp_sec=start_time_msec / 1000.0) if start_time_msec else TracingTimestamp.now()
+    return _recorder().on_distributed_init_start(start_time)
+
+
+@safely_execute
+def on_distributed_init_end(finish_time_msec: Optional[float] = None) -> None:
+    """Call when the distributed initialization ends.
+
+    Args:
+        finish_time_msec (Optional[float], optional): The timestamp of the end of dataloader initialization as milliseconds since epoch.
+        If not provided, the current timestamp will be used as the end time of dataloader initialization.
+    """
+    stop_time = TracingTimestamp.for_timestamp(timestamp_sec=finish_time_msec / 1000.0) if finish_time_msec else TracingTimestamp.now()
+    _recorder().on_distributed_init_end(stop_time)
+
+
+@safely_execute
 def on_model_init_start(start_time_msec: Optional[float] = None) -> Span:
     """Call when the model initialization starts.
 
@@ -193,18 +220,19 @@ def on_train_start(
     train_iterations_target: Optional[int] = None
     train_samples_target: Optional[int] = None
     train_tokens_target: Optional[int] = None
+
+    train_iterations_target = (
+        evaluate_value(train_iterations_target_or_fn) if train_iterations_target_or_fn is not None else training_conf.train_iterations_target
+    )
+    train_samples_target = evaluate_value(train_samples_target_or_fn) if train_samples_target_or_fn is not None else training_conf.train_samples_target
     if training_conf.is_log_throughput_enabled:
         # train_iterations_target and train_samples_target must be set either in the config or passed via this callback.
-        train_iterations_target = (
-            evaluate_value(train_iterations_target_or_fn) if train_iterations_target_or_fn is not None else training_conf.train_iterations_target
-        )
         assert_that(train_iterations_target and train_iterations_target > 0, "train_iterations_target is required and must be a positive integer.")
-
-        train_samples_target = evaluate_value(train_samples_target_or_fn) if train_samples_target_or_fn is not None else training_conf.train_samples_target
         assert_that(train_samples_target is not None and train_samples_target > 0, "train_samples_target is required and must be a positive integer.")
 
-        if training_conf.seq_length and train_samples_target:
-            train_tokens_target = training_conf.seq_length * train_samples_target
+    # Will now calculate train_tokens_target even if is_log_throughput_enabled is False
+    if training_conf.seq_length and train_samples_target:
+        train_tokens_target = training_conf.seq_length * train_samples_target
 
     start_time = TracingTimestamp.for_timestamp(timestamp_sec=start_time_msec / 1000.0) if start_time_msec else TracingTimestamp.now()
     return _recorder().on_training_loop_start(
