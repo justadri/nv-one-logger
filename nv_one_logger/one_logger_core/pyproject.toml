@@ -1,47 +1,58 @@
-[tool.poetry]
+[project]
 name = "nv-one-logger-core"
 version = "2.3.0"
 description = "Extensions to onelogger library to use Open telemetry (OTEL) as a backend."
-authors = ["HWInf-MLWFO <HWInf-MLWFO-E2E-Dev@exchange.nvidia.com>"]
+authors = [{ name = "HWInf-MLWFO", email = "HWInf-MLWFO-E2E-Dev@exchange.nvidia.com" }]
+requires-python = "~=3.8"
 readme = "README.md"
-packages = [
-    {include = "nv_one_logger", from = "src"},
-]
 license = "Apache-2.0"
+dependencies = [
+    "pydantic>=2.10.6,<3",
+    "overrides>=7.7.0,<8",
+    "StrEnum>=0.4.0,<0.5",
+    "toml>=0.10.2,<0.11",
+    "typing-extensions>=4.12.2,<5",
+]
 
 [project.urls]
 Homepage = "https://github.com/NVIDIA/nv-one-logger"
 
-[tool.poetry.dependencies]
-python = "^3.8"
-pydantic = "^2.10.6"
-overrides = "^7.7.0"
-StrEnum = "^0.4.0" # replace with built-in StrEnum if/when we upgrade Python requirement to >= 3.11
-toml = "^0.10.2"
-typing-extensions = "^4.12.2"
-
-
 [build-system]
-requires = ["poetry-core>=1.9.1,<2.0.0", "python-semantic-release>=9.8.3,<10.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "black>=24.8.0,<25",
+    "isort>=5.13.2,<6",
+    "pre-commit>=3.5.0,<4",
+    "mypy>=1.14.1,<2",
+    "pytest>=8.3.4,<9",
+    "pytest-cov>=5.0.0,<6",
+    "annotated-types>=0.7.0,<0.8",
+    "typing-extensions>=4.12.2,<5",
+    "mypy-extensions>=1.0.0,<2",
+    "flake8>=5.0.4,<6",
+    "flake8-bugbear>=23.3.12,<24",
+    "flake8-pyproject>=1.2.3,<2",
+    "flake8-docstrings>=1.7.0,<2",
+    "python-semantic-release>=9.8.3,<10",
+]
 
+[tool.uv]
 
-[tool.poetry.group.dev.dependencies]
-black = "^24.8.0"
-isort = "^5.13.2"
-pre-commit = "^3.5.0"
-mypy = "^1.14.1"
-pytest = "^8.3.4"
-pytest-cov = "^5.0.0"
-annotated-types = "^0.7.0"
-typing-extensions = "^4.12.2"
-mypy-extensions = "^1.0.0"
-flake8 = "^5.0.4"
-flake8-bugbear = "^23.3.12"
-flake8-pyproject = "^1.2.3"
-flake8-docstrings = "^1.7.0"
-python-semantic-release = "^9.8.3"
+# [[tool.uv.index]]
+# name = "nv-shared-pypi"
+# url = "https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/nv_one_logger"]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/nv_one_logger"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/nv_one_logger" = "nv_one_logger"
 
 [tool.black]
 line-length = 160
@@ -102,8 +113,4 @@ exclude_lines = [
     "pass",
     "raise ImportError"
 ]
-
-[[tool.poetry.source]]
-name = "nv-shared-pypi"
-url = "https://urm.nvidia.com/artifactory/api/pypi/nv-shared-pypi/simple"
 
